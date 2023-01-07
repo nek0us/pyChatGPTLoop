@@ -20,7 +20,12 @@ Added backtracking chat on the basis of [terry3041/pyChatGPT](https://github.com
 ### Installation
 
 ```bash
+git clone https://github.com/nek0us/pyChatGPTLoop.git
 pip install .
+
+# or
+
+pip install pyChatGPTLoop --upgrade
 ```
 
 ### Usage
