@@ -1,4 +1,4 @@
-# pyChatGPT
+# pyChatGPTLoop
 
 [![PyPi](https://img.shields.io/pypi/v/pyChatGPTLoop.svg)](https://pypi.python.org/pypi/pyChatGPTLoop)
 [![License](https://img.shields.io/github/license/terry3041/pyChatGPT.svg?color=green)](https://github.com/terry3041/pyChatGPT/blob/main/LICENSE)
@@ -33,13 +33,13 @@ pip install .
 #### Interactive mode
 
 ```bash
-python3 -m pyChatGPT
+python3 -m pyChatGPTLoop
 ```
 
 #### Import as a module
 
 ```python
-from pyChatGPT import ChatGPT
+from pyChatGPTLoop import ChatGPT
 
 session_token = 'abc123'  # `__Secure-next-auth.session-token` cookie from https://chat.openai.com/chat
 api = ChatGPT(session_token)  # auth with session token
@@ -119,7 +119,7 @@ install_chromedriver()
 
 ```python
 # start your script as normal
-!python3 -m pyChatGPT
+!python3 -m pyChatGPTLoop
 ```
 
 ## Insipration
