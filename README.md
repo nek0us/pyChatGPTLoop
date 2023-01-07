@@ -1,27 +1,23 @@
 # pyChatGPT
 
-[![PyPi](https://img.shields.io/pypi/v/pyChatGPT.svg)](https://pypi.python.org/pypi/pyChatGPT)
+[![PyPi](https://img.shields.io/pypi/v/pyChatGPTLoop.svg)](https://pypi.python.org/pypi/pyChatGPTLoop)
 [![License](https://img.shields.io/github/license/terry3041/pyChatGPT.svg?color=green)](https://github.com/terry3041/pyChatGPT/blob/main/LICENSE)
 ![PyPi](https://img.shields.io/badge/code_style-black+flake8-blue.svg)
 
-An unofficial Python wrapper for OpenAI's ChatGPT API
+Added backtracking chat on the basis of [terry3041/pyChatGPT](https://github.com/terry3041/pyChatGPT)
 
-## Features
+## Extra Features
 
--   [x] Cloudflare's anti-bot protection bypass using `undetected_chromedriver`
--   [x] OpenAI / Google / Microsoft login support (experimental)
--   [x] Captcha solvers support (2Captcha, PyPasser)
--   [x] [Headless machines support](#how-do-i-get-it-to-work-on-headless-linux-server)
--   [x] Proxy support (only without basic auth)
-
+-   [x] can go back to a conversational moment in the past
+-   [x] Optimized the output, removing two newlines
 ## Getting Started
 
-> Since version 0.3.0, this library is using only the `undetected_chromedriver` to bypass Cloudflare's anti-bot protection. `requests` module is no longer used due to the complexity of the protection. **Please make sure you have [Google Chrome](https://www.google.com/chrome/) / [Chromium](https://www.chromium.org/) before using this wrapper.**
+> This library is using only the `undetected_chromedriver` to bypass Cloudflare's anti-bot protection.  **Please make sure you have [Google Chrome](https://www.google.com/chrome/) / [Chromium](https://www.chromium.org/) before using this wrapper.**
 
 ### Installation
 
 ```bash
-pip install -U pyChatGPT
+pip install .
 ```
 
 ### Usage
@@ -82,9 +78,20 @@ print(resp['message'])
 api.reset_conversation()  # reset the conversation
 api.clear_conversations()  # clear all conversations
 api.refresh_chat_page()  # refresh the chat page
+api.backtrack_chat(loop_text)  # return the loop_text conversation
 ```
 
 ## Frequently Asked Questions
+
+### How do i go back to the conversation i had?
+
+```bash
+# You said some words to chatGPT
+loop_text = 'some words'
+
+# Go back to the dialogue where these words last appeared
+api.backtrack_chat(loop_text)
+`
 
 ### How do I get it to work on headless linux server?
 
@@ -95,7 +102,7 @@ sudo apt install chromium-browser xvfb
 # start your script
 python3 your_script.py
 ```
-
+![image](https://user-images.githubusercontent.com/19218518/206170122-61fbe94f-4b0c-4782-a344-e26ac0d4e2a7.png)
 ### How do I get it to work on Google Colab?
 
 It is normal for the seession to be crashed when installing dependencies. Just ignore the error and run your script.
@@ -119,6 +126,7 @@ install_chromedriver()
 
 This project is inspired by
 
+-   [pyChatGPT](https://github.com/terry3041/pyChatGPT)
 -   [ChatGPT](https://github.com/acheong08/ChatGPT)
 -   [chatgpt-api](https://github.com/transitive-bullshit/chatgpt-api)
 

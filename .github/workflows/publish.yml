@@ -1,7 +1,8 @@
-name: Publish to PyPI.org
+name: Publish ${package_name} to PyPI / GitHub
 on:
-    release:
-        types: [published]
+    poush:
+        tags:
+            - "v*"
 jobs:
     pypi:
         runs-on: ubuntu-latest
