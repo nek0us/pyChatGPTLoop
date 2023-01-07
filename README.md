@@ -42,7 +42,7 @@ python3 -m pyChatGPTLoop
 #### Import as a module
 
 ```python
-from pyChatGPTLoop import ChatGPT
+from pyChatGPTLoop.pyChatGPTLoop import ChatGPT
 
 session_token = 'abc123'  # `__Secure-next-auth.session-token` cookie from https://chat.openai.com/chat
 api = ChatGPT(session_token)  # auth with session token
