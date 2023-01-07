@@ -99,7 +99,7 @@ loop_text = 'some words'
 
 # Go back to the dialogue where these words last appeared
 api.backtrack_chat(loop_text)
-`
+```
 
 ### How do I get it to work on headless linux server?
 
