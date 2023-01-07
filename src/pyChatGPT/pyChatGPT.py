@@ -38,6 +38,7 @@ chatgpt_chats_list_first_node = (
     '//div[substring(@class, string-length(@class) - string-length("text-sm") + 1)  = "text-sm"]//a',
 )
 
+
 chatgpt_chat_url = 'https://chat.openai.com/chat'
 
 
@@ -401,7 +402,7 @@ class ChatGPT:
         Send a message to ChatGPT\n
         :param message: Message to send
         :return: Dictionary with keys `message` and `conversation_id`
-        '''
+        ''' 
         self.logger.debug('Ensuring Cloudflare cookies...')
         self.__ensure_cf()
 
@@ -455,6 +456,8 @@ class ChatGPT:
             ).click()
             matches = pattern.search(self.driver.current_url)
         conversation_id = matches.group()
+        if content[-2:] == "\n\n":
+            content = content[:-2]
         return {'message': content, 'conversation_id': conversation_id}
 
     def reset_conversation(self) -> None:
@@ -506,3 +509,67 @@ class ChatGPT:
         self.driver.get(chatgpt_chat_url)
         self.__check_capacity(chatgpt_chat_url)
         self.__check_blocking_elements()
+        
+    def backtrack_chat(self,loop_text) -> bool:
+        '''
+        backtrack the chat
+        '''
+        self.logger.debug('Ensuring Cloudflare cookies...')
+        self.__ensure_cf()
+
+        self.logger.debug('Find loop...')
+        loop_text_num = ""
+        chatgpt_loop_text = self.driver.find_elements(By.XPATH,"//div[@class='min-h-[20px] flex flex-col items-start gap-4 whitespace-pre-wrap']")
+        for x,y in enumerate(chatgpt_loop_text[::-1]):
+            if loop_text in y.text:
+                loop_text_num = str(len(chatgpt_loop_text) - x)
+        self.logger.debug('Waiting for backtrack...')
+        self.driver.implicitly_wait(1)
+        
+        chatgpt_loop_button_on_text_find = '//*[@id="__next"]/div[2]/div[1]/main/div[1]/div/div/div['+ str(int(loop_text_num)+2) + ']/div/div[2]/div[2]'
+        chatgpt_loop_button_on_text = '//*[@id="__next"]/div[2]/div[1]/main/div[1]/div/div/div['+ loop_text_num + ']/div/div[2]/div[2]'
+        chatgpt_loop_button_submit_text = '//*[@id="__next"]/div[2]/div[1]/main/div[1]/div/div/div['+ loop_text_num + ']/div/div[2]/div/div/button[1]'
+        
+        self.logger.debug('Refresh chat page...')
+        self.driver.get(f'{chatgpt_chat_url}/{self.__conversation_id}')
+        self.__check_blocking_elements()
+        chatgpt_loop_button_on = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, chatgpt_loop_button_on_text_find))
+        ) 
+        try:
+            chatgpt_loop_button_on.click()
+        except:
+            pass
+        try:
+            chatgpt_loop_button_on = WebDriverWait(self.driver, 10).until(
+                EC.visibility_of_element_located((By.XPATH,chatgpt_loop_button_on_text))
+            )  
+            chatgpt_loop_button_on.click()
+            
+            self.driver.implicitly_wait(1)
+            
+            chatgpt_loop_button_submit = WebDriverWait(self.driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH,chatgpt_loop_button_submit_text))
+            )  
+            
+            chatgpt_loop_button_submit.click()
+        except:
+            return False
+            #pass
+        self.logger.debug('Waiting for completion...')
+        WebDriverWait(self.driver, 120).until_not(
+            EC.presence_of_element_located(chatgpt_streaming)
+        )
+
+        self.logger.debug('Getting response...')
+        responses = self.driver.find_elements(*chatgpt_big_response)
+        if responses:
+            response = responses[-1]
+            if 'text-red' in response.get_attribute('class'):
+                self.logger.debug('Response is an error')
+                raise ValueError(response.text)
+        response = self.driver.find_elements(*chatgpt_small_response)[-1]
+        if response:
+            return True
+        else:
+            return False
