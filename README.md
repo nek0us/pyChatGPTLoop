@@ -5,7 +5,7 @@
 ![PyPi](https://img.shields.io/badge/code_style-black+flake8-blue.svg)
 
 Added backtracking chat on the basis of [terry3041/pyChatGPT](https://github.com/terry3041/pyChatGPT)
-
+![image](https://github.com/nek0us/pyChatGPTLoop/blob/v0.0.1/test.png)
 ## Extra Features
 
 -   [x] can go back to a conversational moment in the past
