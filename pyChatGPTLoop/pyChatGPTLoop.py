@@ -529,7 +529,7 @@ class ChatGPT:
         self.logger.debug('Waiting for backtrack...')
         self.driver.implicitly_wait(1)
         
-        chatgpt_loop_button_on_text_find = '//*[@id="__next"]/div[2]/div[1]/main/div[1]/div/div/div['+ str(int(loop_text_num)+1) + ']/div/div[2]/div[2]'
+        chatgpt_loop_button_on_text_find = '//*[@id="__next"]/div[2]/div[1]/main/div[1]/div/div/div['+ str(int(loop_text_num)+2) + ']/div/div[2]/div[2]'
         chatgpt_loop_button_on_text = '//*[@id="__next"]/div[2]/div[1]/main/div[1]/div/div/div['+ loop_text_num + ']/div/div[2]/div[2]'
         chatgpt_loop_button_submit_text = '//*[@id="__next"]/div[2]/div[1]/main/div[1]/div/div/div['+ loop_text_num + ']/div/div[2]/div/div/button[1]'
         
@@ -537,11 +537,11 @@ class ChatGPT:
         self.driver.get(self.driver.current_url)
         #self.driver.get(f'{chatgpt_chat_url}/{conversation_id}')
         self.__check_blocking_elements()
-        chatgpt_loop_button_on = WebDriverWait(self.driver, 10).until(
+        chatgpt_loop_button_on_find = WebDriverWait(self.driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, chatgpt_loop_button_on_text_find))
         ) 
         try:
-            chatgpt_loop_button_on.click()
+            chatgpt_loop_button_on_find.click()
         except:
             pass
         try:
