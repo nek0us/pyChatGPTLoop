@@ -13,6 +13,7 @@ import json
 import time
 import re
 import os
+import asyncio 
 
 
 cf_challenge_form = (By.ID, 'challenge-form')
@@ -61,6 +62,7 @@ class ChatGPT:
         chrome_args: list = [],
         moderation: bool = True,
         verbose: bool = False,
+        driver_path = '',
     ):
         '''
         Initialize the ChatGPT object\n
@@ -90,6 +92,7 @@ class ChatGPT:
         self.__proxy = proxy
         self.__chrome_args = chrome_args
         self.__moderation = moderation
+        self.__driver_path = driver_path
 
         if not self.__session_token and (
             not self.__email or not self.__password or not self.__auth_type
@@ -180,7 +183,7 @@ class ChatGPT:
         for arg in self.__chrome_args:
             options.add_argument(arg)
         try:
-            self.driver = uc.Chrome(options=options)
+            self.driver = uc.Chrome(options=options,driver_executable_path=self.__driver_path)
         except TypeError as e:
             if str(e) == 'expected str, bytes or os.PathLike object, not NoneType':
                 raise ValueError('Chrome installation not found')
@@ -526,12 +529,13 @@ class ChatGPT:
         self.logger.debug('Waiting for backtrack...')
         self.driver.implicitly_wait(1)
         
-        chatgpt_loop_button_on_text_find = '//*[@id="__next"]/div[2]/div[1]/main/div[1]/div/div/div['+ str(int(loop_text_num)+2) + ']/div/div[2]/div[2]'
+        chatgpt_loop_button_on_text_find = '//*[@id="__next"]/div[2]/div[1]/main/div[1]/div/div/div['+ str(int(loop_text_num)+1) + ']/div/div[2]/div[2]'
         chatgpt_loop_button_on_text = '//*[@id="__next"]/div[2]/div[1]/main/div[1]/div/div/div['+ loop_text_num + ']/div/div[2]/div[2]'
         chatgpt_loop_button_submit_text = '//*[@id="__next"]/div[2]/div[1]/main/div[1]/div/div/div['+ loop_text_num + ']/div/div[2]/div/div/button[1]'
         
         self.logger.debug('Refresh chat page...')
-        self.driver.get(f'{chatgpt_chat_url}/{self.__conversation_id}')
+        self.driver.get(self.driver.current_url)
+        #self.driver.get(f'{chatgpt_chat_url}/{conversation_id}')
         self.__check_blocking_elements()
         chatgpt_loop_button_on = WebDriverWait(self.driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, chatgpt_loop_button_on_text_find))
@@ -573,3 +577,60 @@ class ChatGPT:
             return True
         else:
             return False
+        
+    def init_personality(self,new_conversation:bool=True,personality_definition:list=[{"content":"you are a pig","AI_verify":True}]) -> dict:
+        '''
+        new_conversation : Whether to open a new session for personality initialization, the default is true
+        
+        personality_definition: Personality initialization phrase is a list, a single element is a dict, 
+        content is the content of the phrase, and AI_verify is a successful detection of personality
+        
+        returns a boolean result
+        '''
+        if new_conversation:
+            self.refresh_chat_page()
+        asyncio.run(asyncio.sleep(1))
+        for single_definition in personality_definition:
+            this_res = self.send_message(single_definition["content"])
+            asyncio.run(asyncio.sleep(1))
+            if single_definition["AI_verify"]:
+                this_status = self.wide_awake(this_res["message"])
+                error_num = 0
+                while this_status:
+                    self.backtrack_chat(single_definition["content"])
+                    asyncio.run(asyncio.sleep(1))
+                    responses = self.driver.find_elements(*chatgpt_big_response)
+                    if responses:
+                        response = responses[-1]
+                        if 'text-red' in response.get_attribute('class'):
+                            self.logger.debug('Response is an error')
+                            raise ValueError(response.text)
+                    response = self.driver.find_elements(*chatgpt_small_response)[-1]
+                    content = markdownify(response.get_attribute('innerHTML')).replace('Copy code`', '`')
+                    if content[-2:] == "\n\n":
+                        content = content[:-2]
+                    this_status = self.wide_awake(content)
+                    error_num += 1
+                    if error_num > 3:
+                        '''
+                        If it fails more than three times, there may be a problem with your initialization vocabulary
+                        '''
+                        break
+                    
+                    
+        res = self.send_message("so please introduce yourself now")
+        status = self.wide_awake(res["message"])
+                
+        return {"status":status,"conversation_id":res["conversation_id"]}
+        
+    def wide_awake(self,res:str) -> bool:
+        words = ["AI","Ai","ai","Assistant","language model","OpenAI","程序","计算机","人工智能","机器人"]
+        '''
+        Initialization result detection vocabulary, which can be changed according to its own language and initialization statement
+        '''
+        status = False
+        for word in words:
+            if word in res:
+                status = True
+        return status
+        

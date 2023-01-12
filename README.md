@@ -8,11 +8,25 @@
 
 Added backtracking chat on the basis of [terry3041/pyChatGPT](https://github.com/terry3041/pyChatGPT)
 
-![image](https://github.com/nek0us/pyChatGPTLoop/blob/v0.0.1/test.png)
+
 ## Extra Features
 
 -   [x] can go back to a conversational moment in the past
--   [x] Optimized the output, removing two newlines
+-   [x] increase the function of initializing personality
+-   [x] set local chromedriver 
+-   [x] optimized the output, removing two newlines
+
+## backtracking chat
+
+[![pSurC8S.png](https://s1.ax1x.com/2023/01/12/pSurC8S.png)](https://imgse.com/i/pSurC8S)
+
+
+## initializing personality
+
+
+[![pSurS4f.png](https://s1.ax1x.com/2023/01/12/pSurS4f.png)](https://imgse.com/i/pSurS4f)
+
+
 ## Getting Started
 
 > This library is using only the `undetected_chromedriver` to bypass Cloudflare's anti-bot protection.  **Please make sure you have [Google Chrome](https://www.google.com/chrome/) / [Chromium](https://www.chromium.org/) before using this wrapper.**
@@ -57,6 +71,9 @@ api = ChatGPT(session_token, chrome_args=['--window-size=1920,768'])  # specify 
 api = ChatGPT(session_token, moderation=False)  # disable moderation
 api = ChatGPT(session_token, verbose=True)  # verbose mode (print debug messages)
 
+api = ChatGPT(session_token, driver_path="C:\\yourdriverpath\\chromedriver.exe") # set local chromedriver if you don't wish it update in windows
+api = ChatGPT(session_token, driver_path="/yourpath/chromedriver") # set local chromedriver if you don't wish it update in linux
+
 # auth with google login
 api = ChatGPT(auth_type='google', email='example@gmail.com', password='password')
 # auth with microsoft login
@@ -86,10 +103,38 @@ print(resp['message'])
 api.reset_conversation()  # reset the conversation
 api.clear_conversations()  # clear all conversations
 api.refresh_chat_page()  # refresh the chat page
+
+loop_text = "some words"
 api.backtrack_chat(loop_text)  # return the loop_text conversation
+
+personality_definition = [{"content":r'Now you are going to pretend to be a math teacher called "nothing" to help me with my math',"AI_verify":True}]
+api.init_personality(True,personality_definition)
 ```
 
 ## Frequently Asked Questions
+
+### How do i initializing personality?
+
+```bash
+# An example of initializing the vocabulary format, the vocabulary content is not representative
+personality_definition = [
+        {
+            "content":r'Now you are going to pretend to be a math teacher called "nothing" to help me with my math',
+            "AI_verify":True
+            },
+        {
+            "content":r"You will be very strict in pointing out my mistakes",
+            "AI_verify":False
+            }
+    ]
+
+new_conversation = True
+api.backtrack_chat(new_conversation,personality_definition)
+# new_conversation : Whether to open a new session for personality initialization, the default is true
+# personality_definition: Personality initialization phrase is a list, a single element is a dict, 
+# content is the content of the phrase, and AI_verify is a successful detection of personality
+# returns a boolean result
+```
 
 ### How do i go back to the conversation i had?
 
@@ -99,6 +144,7 @@ loop_text = 'some words'
 
 # Go back to the dialogue where these words last appeared
 api.backtrack_chat(loop_text)
+#return an boolen result
 ```
 
 ### How do I get it to work on headless linux server?
