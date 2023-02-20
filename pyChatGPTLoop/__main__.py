@@ -53,7 +53,7 @@ if __name__ == '__main__':
             
             print('\nChatGPT: ', end='')
             loop_text = prompt.lower().split('back')[1][1:]
-            response = asyncio.run(chat.backtrack_chat(conversation_id,loop_text))
+            response = asyncio.run(chat.backtrack_chat(loop_text,conversation_id))
             if response:
                 print("yes!", end='')
             else:
@@ -71,5 +71,5 @@ if __name__ == '__main__':
                 
         else:
             print('\nChatGPT: ', end='')
-            response = asyncio.run(chat.async_send_message(conversation_id,prompt)) # type: ignore
+            response = asyncio.run(chat.async_send_message(prompt,conversation_id)) # type: ignore
             print(response['message'], end='')

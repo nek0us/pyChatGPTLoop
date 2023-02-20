@@ -603,14 +603,16 @@ class ChatGPT:
 
         return await self.return_chat_url()
         
-    async def backtrack_chat(self,conversation_id: str,loop_text:str) -> bool:
+    async def backtrack_chat(self,loop_text:str,conversation_id: str = "") -> bool:
         '''
         backtrack the chat,
         conversation_id : conversation_id,
         loop_text: history messages you have sent in this conversation,
         return bool
         '''
-        
+        if conversation_id == "":
+            conversation_id = self.__conversation_id
+            
         await self.cf(conversation_id)
         
         self.driver.get(self.driver.current_url)
@@ -820,12 +822,15 @@ class ChatGPT:
         self.msg_id += 1
         return self.msg_id
                 
-    async def async_send_message(self,conversation_id,msg):
+    async def async_send_message(self,msg,conversation_id:str = "") -> dict:
         '''async send_message,
         conversation_id: conversation_id,
         msg: your message to gpt.
         returns a dictionary containing the conversation id and the reply
         '''
+        if conversation_id == "":
+            conversation_id = self.__conversation_id
+            
         msg_dict = {
             "id":await self.get_id(), 
             "type":"msg",
