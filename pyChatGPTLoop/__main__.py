@@ -71,5 +71,5 @@ if __name__ == '__main__':
                 
         else:
             print('\nChatGPT: ', end='')
-            response = asyncio.run(chat.async_send_message(prompt,conversation_id)) # type: ignore
+            response = asyncio.run(chat.async_send_message(prompt,conversation_id,msg_type="msg")) # type: ignore
             print(response['message'], end='')

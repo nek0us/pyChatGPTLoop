@@ -804,16 +804,16 @@ class ChatGPT:
                         
                 elif msg_send["type"] == "loop":
                     try:
-                        msg_send["msg_rec"] = self.backtrack_chat(msg_send["conversation_id"],msg_send["msg_send"])
+                        msg_send["msg_rec"] = await self.backtrack_chat(msg_send["msg_send"],msg_send["conversation_id"])
                     except:
                         
                         msg_send["msg_rec"] = False
                 elif msg_send["type"] == "init":
                     try:
-                        msg_send["msg_rec"] = self.init_personality()
+                        msg_send["msg_rec"] = await self.init_personality(bool(msg_send["msg_send"]),msg_send["conversation_id"])
                     except:
                         
-                        msg_send["msg_rec"] = {"status":False,"conversation_id":"失败了"}
+                        msg_send["msg_rec"] = {"status":False,"conversation_id":""}
                     
                 self.rec.append(msg_send)
     
@@ -822,7 +822,7 @@ class ChatGPT:
         self.msg_id += 1
         return self.msg_id
                 
-    async def async_send_message(self,msg,conversation_id:str = "") -> dict:
+    async def async_send_message(self,msg,conversation_id:str = "",msg_type: str = "msg") -> dict:
         '''async send_message,
         conversation_id: conversation_id,
         msg: your message to gpt.
@@ -833,7 +833,7 @@ class ChatGPT:
             
         msg_dict = {
             "id":await self.get_id(), 
-            "type":"msg",
+            "type":msg_type,
             "msg":msg,
             "conversation_id":conversation_id
         }

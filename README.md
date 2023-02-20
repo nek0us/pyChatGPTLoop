@@ -100,25 +100,32 @@ api = ChatGPT(auth_type='openai', email='example@xxx.com', password='password',
 
 api.reset_conversation()  # reset the conversation
 api.clear_conversations()  # clear all conversations
-await api.refresh_chat_page()  # refresh the chat page
 
+# send message 
 resp = asyncio(api.async_send_message('Hello, world!'))
 print(resp['message'])
 
 # if in an async function
-resp = await api.async_send_message('Hello, world!')
+resp = await api.async_send_message('Hello, world!',msg_type="loop")
 print(resp['message'])
 
+# refresh the chat page
+await api.refresh_chat_page()  
 
+# return the loop_text conversation
 loop_text = "some words"
-await api.backtrack_chat(loop_text)  # return the loop_text conversation
+resp = await api.async_send_message(loop_text,msg_type="loop")
 
-#You can pass the conversation id to the right of Hello, world! or loop_text
-
-resp = await api.async_send_message('Hello, world!',conversation_id)
+#You can pass the conversation id to the right
+resp = await api.async_send_message('Hello, world!',conversation_id,msg_type="msg")
 
 personality_definition = [{"content":r'Now you are going to pretend to be a math teacher called "nothing" to help me with my math',"AI_verify":True}]
-await api.init_personality(True,personality_definition)
+await api.init_personality(True,"",personality_definition)
+
+#or 
+
+resp = await api.async_send_message(personality_definition,conversation_id,msg_type="init")
+
 ```
 
 ## Frequently Asked Questions
@@ -156,6 +163,9 @@ loop_text = 'some words'
 await api.backtrack_chat(loop_text)
 #You can pass the conversation id to the right of loop_text
 #return an boolen result
+
+# if you use an async method
+resp = await api.async_send_message(loop_text,msg_type="loop")
 ```
 
 ### How do I get it to work on headless linux server?
