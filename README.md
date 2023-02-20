@@ -11,6 +11,7 @@ Added backtracking chat on the basis of [terry3041/pyChatGPT](https://github.com
 
 ## Extra Features
 
+-   [x] Implement asynchronous use
 -   [x] can go back to a conversational moment in the past
 -   [x] increase the function of initializing personality
 -   [x] set local chromedriver 

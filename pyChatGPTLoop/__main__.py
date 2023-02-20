@@ -1,3 +1,4 @@
+import asyncio
 from pyChatGPTLoop import ChatGPT
 import os
 
@@ -9,15 +10,15 @@ def clear_screen():
 if __name__ == '__main__':
     while True:
         session_token = input('Please enter your session token: ')
-        
+        #session_token = "ey"
         conversation_id = input(
-            'Please enter your conversation id (if you want to continue old chat): '
+           'Please enter your conversation id (if you want to continue old chat): '
         )
-        
+        #conversation_id = ""
         proxy = input('Please enter your proxy if you have: eg: http://127.0.0.1:8080')
-        
+        #proxy = "http://127.0.0.1:1090"
         driver_path = input('Please enter your chromedriver path if you have: eg: D:\\chromedriver.exe')
-        
+        #driver_path = "chromedriver.exe"
         chat = ChatGPT(session_token, conversation_id,proxy=proxy,driver_path=driver_path)
         break
 
@@ -52,7 +53,7 @@ if __name__ == '__main__':
             
             print('\nChatGPT: ', end='')
             loop_text = prompt.lower().split('back')[1][1:]
-            response = chat.backtrack_chat(loop_text)
+            response = asyncio.run(chat.backtrack_chat(conversation_id,loop_text))
             if response:
                 print("yes!", end='')
             else:
@@ -62,13 +63,13 @@ if __name__ == '__main__':
             break
         
         elif prompt.lower() == "new":
-            res = chat.init_personality(True,words)
-            if res:
-                print("yes!")
+            res = asyncio.run(chat.init_personality(True,"",words))
+            if res["status"]:
+                print("yes! id="+res["conversation_id"])
             else:
                 print("no!")
                 
         else:
             print('\nChatGPT: ', end='')
-            response = chat.send_message(prompt)
+            response = asyncio.run(chat.async_send_message(conversation_id,prompt)) # type: ignore
             print(response['message'], end='')

@@ -1,6 +1,6 @@
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common import exceptions as SeleniumExceptions
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait   # type: ignore
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 
@@ -14,6 +14,7 @@ import time
 import re
 import os
 import asyncio 
+import threading
 
 
 cf_challenge_form = (By.ID, 'challenge-form')
@@ -39,7 +40,6 @@ chatgpt_chats_list_first_node = (
     '//div[substring(@class, string-length(@class) - string-length("text-sm") + 1)  = "text-sm"]//a',
 )
 
-
 chatgpt_chat_url = 'https://chat.openai.com/chat'
 
 
@@ -50,15 +50,15 @@ class ChatGPT:
 
     def __init__(
         self,
-        session_token: str = None,
+        session_token: str = None,   # type: ignore
         conversation_id: str = '',
-        auth_type: str = None,
-        email: str = None,
-        password: str = None,
+        auth_type: str = None,  # type: ignore
+        email: str = None,  # type: ignore
+        password: str = None,  # type: ignore
         login_cookies_path: str = '',
         captcha_solver: str = 'pypasser',
         solver_apikey: str = '',
-        proxy: str = None,
+        proxy: str = None,  # type: ignore
         chrome_args: list = [],
         moderation: bool = True,
         verbose: bool = False,
@@ -112,7 +112,7 @@ class ChatGPT:
             raise ValueError('Invalid proxy format')
         if self.__auth_type == 'openai' and self.__captcha_solver == 'pypasser':
             try:
-                import ffmpeg_downloader as ffdl
+                import ffmpeg_downloader as ffdl  # type: ignore
             except ModuleNotFoundError:
                 raise ValueError(
                     'Please install ffmpeg_downloader, PyPasser, and pocketsphinx by running `pip install ffmpeg_downloader PyPasser pocketsphinx`'
@@ -126,12 +126,26 @@ class ChatGPT:
                 sp.run(['ffdl', 'install'])
             os.environ['PATH'] += os.pathsep + ffdl.ffmpeg_dir
 
-        self.__init_browser()
+        # async_loop
+        self.rec = []
+        self.msg_id:int = 0
+        self.send_queue = asyncio.Queue()
+        self.loop = asyncio.get_event_loop()
+        self.t2 = asyncio.ensure_future(self.loop_gpt())
+        self.t = threading.Thread(target=self.loop.run_forever)
+        self.t.start()
+        
+        asyncio.run(self.__init_browser())
+        
+        
+        
 
     def __del__(self):
         '''
         Close the browser and display
         '''
+        self.loop.stop()
+        
         self.__is_active = False
         if hasattr(self, 'driver'):
             self.logger.debug('Closing browser...')
@@ -153,14 +167,14 @@ class ChatGPT:
             stream_handler.setFormatter(formatter)
             self.logger.addHandler(stream_handler)
 
-    def __init_browser(self) -> None:
+    async def __init_browser(self) -> None:
         '''
         Initialize the browser
         '''
         if platform.system() == 'Linux' and 'DISPLAY' not in os.environ:
             self.logger.debug('Starting virtual display...')
             try:
-                from pyvirtualdisplay import Display
+                from pyvirtualdisplay import Display  # type: ignore
 
                 self.display = Display()
             except ModuleNotFoundError:
@@ -222,7 +236,7 @@ class ChatGPT:
             )
 
         self.logger.debug('Ensuring Cloudflare cookies...')
-        self.__ensure_cf()
+        await self.__ensure_cf()
 
         self.logger.debug('Opening chat page...')
         self.driver.get(f'{chatgpt_chat_url}/{self.__conversation_id}')
@@ -231,7 +245,7 @@ class ChatGPT:
         self.__is_active = True
         Thread(target=self.__keep_alive, daemon=True).start()
 
-    def __ensure_cf(self, retry: int = 3) -> None:
+    async def __ensure_cf(self, retry: int = 3) -> None:
         '''
         Ensure Cloudflare cookies are set\n
         :param retry: Number of retries
@@ -243,22 +257,64 @@ class ChatGPT:
         self.logger.debug('Getting Cloudflare challenge...')
         self.driver.get('https://chat.openai.com/api/auth/session')
         try:
-            WebDriverWait(self.driver, 10).until_not(
-                EC.presence_of_element_located(cf_challenge_form)
-            )
-        except SeleniumExceptions.TimeoutException:
-            self.logger.debug(f'Cloudflare challenge failed, retrying {retry}...')
-            self.driver.save_screenshot(f'cf_failed_{retry}.png')
-            if retry > 0:
-                self.logger.debug('Closing tab...')
-                self.driver.close()
-                self.driver.switch_to.window(original_window)
-                return self.__ensure_cf(retry - 1)
-            raise ValueError('Cloudflare challenge failed')
+            
+            page  = self.driver.execute_script("return JSON.parse(document.body.innerText)")
+            response = json.dumps(self.driver.execute_script("return JSON.parse(document.body.innerText)"))
+            
+        except:
+            # cf 
+            try:
+                # cf button
+                cf_button = False
+                try:
+                    cf_button_find = WebDriverWait(self.driver, 10).until(
+                    EC.visibility_of_element_located((By.XPATH, '//*[@id="challenge-stage"]/div/input'))
+                ) 
+                    cf_button = True
+                except:
+                    pass
+                
+                if cf_button:
+                
+                    cf_button_find = WebDriverWait(self.driver, 10).until(
+                    EC.visibility_of_element_located((By.XPATH, '//*[@id="challenge-stage"]/div'))
+                ) 
+                    cf_button_find.click()
+                    
+                else:
+                    self.logger.debug(f'Cloudflare challenge failed, retrying {retry}...')
+                    self.driver.save_screenshot(f'cf_failed_{retry}.png')
+                    if retry > 0:
+                        self.logger.debug('Closing tab...')
+                        self.driver.close()
+                        self.driver.switch_to.window(original_window)
+                        return await self.__ensure_cf(retry - 1)
+                    raise ValueError('Cloudflare challenge failed')
+                
+                
+            except SeleniumExceptions.TimeoutException:
+                
+                self.logger.debug(f'Cloudflare challenge failed, retrying {retry}...')
+                self.driver.save_screenshot(f'cf_failed_{retry}.png')
+                if retry > 0:
+                    self.logger.debug('Closing tab...')
+                    self.driver.close()
+                    self.driver.switch_to.window(original_window)
+                    return await self.__ensure_cf(retry - 1)
+                raise ValueError('Cloudflare challenge failed')
         self.logger.debug('Cloudflare challenge passed')
-
+        
+        self.driver.get('https://chat.openai.com/api/auth/session')
+        wait = WebDriverWait(self.driver, 5).until(EC.invisibility_of_element_located((By.CSS_SELECTOR, 'a')))
+        await asyncio.sleep(3)
         self.logger.debug('Validating authorization...')
-        response = self.driver.page_source
+        try:
+            response = json.dumps(self.driver.execute_script("return JSON.parse(document.body.innerText)"))
+        
+        except:
+            await asyncio.sleep(3)
+            response = json.dumps(self.driver.execute_script("return JSON.parse(document.body.innerText)"))
+        
         if response[0] != '{':
             response = self.driver.find_element(By.TAG_NAME, 'pre').text
         response = json.loads(response)
@@ -400,15 +456,17 @@ class ChatGPT:
             if not result_streaming:
                 break
 
-    def send_message(self, message: str, stream: bool = False) -> dict:
+    async def send_message(self, conversation_id: str, message: str, stream: bool = False ) -> dict:
         '''
+        please use async_send_message,
         Send a message to ChatGPT\n
         :param message: Message to send
         :return: Dictionary with keys `message` and `conversation_id`
         ''' 
-        self.logger.debug('Ensuring Cloudflare cookies...')
-        self.__ensure_cf()
+        await self.cf(conversation_id)
 
+        await asyncio.sleep(2)
+        
         self.logger.debug('Sending message...')
         textbox = WebDriverWait(self.driver, 5).until(
             EC.element_to_be_clickable(chatgpt_textbox)
@@ -429,7 +487,7 @@ class ChatGPT:
             for i in self.__stream_message():
                 print(i, end='')
                 time.sleep(0.1)
-            return print()
+            return print() # type: ignore 
 
         self.logger.debug('Waiting for completion...')
         WebDriverWait(self.driver, 120).until_not(
@@ -458,7 +516,7 @@ class ChatGPT:
                 EC.element_to_be_clickable(chatgpt_chats_list_first_node)
             ).click()
             matches = pattern.search(self.driver.current_url)
-        conversation_id = matches.group()
+        conversation_id = matches.group() # type: ignore 
         if content[-2:] == "\n\n":
             content = content[:-2]
         return {'message': content, 'conversation_id': conversation_id}
@@ -467,6 +525,8 @@ class ChatGPT:
         '''
         Reset the conversation
         '''
+        
+        
         if not self.driver.current_url.startswith(chatgpt_chat_url):
             return self.logger.debug('Current URL is not chat page, skipping reset')
 
@@ -502,10 +562,15 @@ class ChatGPT:
         except SeleniumExceptions.TimeoutException:
             self.logger.debug('Clear conversations failed')
 
-    def refresh_chat_page(self) -> None:
+    async def refresh_chat_page(self):
         '''
-        Refresh the chat page
+        Refresh the chat page,
+        and return the new conversation_id
         '''
+        
+        await self.cf(None)
+        
+        
         if not self.driver.current_url.startswith(chatgpt_chat_url):
             return self.logger.debug('Current URL is not chat page, skipping refresh')
 
@@ -513,45 +578,67 @@ class ChatGPT:
         self.__check_capacity(chatgpt_chat_url)
         self.__check_blocking_elements()
         
-    def backtrack_chat(self,loop_text) -> bool:
-        '''
-        backtrack the chat
-        '''
-        self.logger.debug('Ensuring Cloudflare cookies...')
-        self.__ensure_cf()
+        
+        self.logger.debug('Sending test message...')
+        textbox = WebDriverWait(self.driver, 5).until(
+            EC.element_to_be_clickable(chatgpt_textbox)
+        )
+        textbox.click()
+        self.driver.execute_script(
+            '''
+        var element = arguments[0], txt = arguments[1];
+        element.value += txt;
+        element.dispatchEvent(new Event("change"));
+        ''',
+            textbox,
+            "1",
+        )
+        textbox.send_keys(Keys.ENTER)
 
+
+        self.logger.debug('Waiting for completion...')
+        WebDriverWait(self.driver, 120).until_not(
+            EC.presence_of_element_located(chatgpt_streaming)
+        )
+
+        return await self.return_chat_url()
+        
+    async def backtrack_chat(self,conversation_id: str,loop_text:str) -> bool:
+        '''
+        backtrack the chat,
+        conversation_id : conversation_id,
+        loop_text: history messages you have sent in this conversation,
+        return bool
+        '''
+        
+        await self.cf(conversation_id)
+        
+        self.driver.get(self.driver.current_url)
         self.logger.debug('Find loop...')
+        self.__check_blocking_elements()
+        
+        await asyncio.sleep(2)
+        
         loop_text_num = ""
         chatgpt_loop_text = self.driver.find_elements(By.XPATH,"//div[@class='min-h-[20px] flex flex-col items-start gap-4 whitespace-pre-wrap']")
         for x,y in enumerate(chatgpt_loop_text[::-1]):
             if loop_text in y.text:
                 loop_text_num = str(len(chatgpt_loop_text) - x)
         self.logger.debug('Waiting for backtrack...')
-        self.driver.implicitly_wait(1)
         
-        chatgpt_loop_button_on_text_find = '//*[@id="__next"]/div[2]/div[1]/main/div[1]/div/div/div['+ str(int(loop_text_num)+2) + ']/div/div[2]/div[2]'
-        chatgpt_loop_button_on_text = '//*[@id="__next"]/div[2]/div[1]/main/div[1]/div/div/div['+ loop_text_num + ']/div/div[2]/div[2]'
-        chatgpt_loop_button_submit_text = '//*[@id="__next"]/div[2]/div[1]/main/div[1]/div/div/div['+ loop_text_num + ']/div/div[2]/div/div/button[1]'
+        chatgpt_loop_button_on_text_find = '//*[@id="__next"]/div[2]/div/main/div[1]/div/div/div/div['+ loop_text_num + ']/div/div[2]/div[2]'
+        chatgpt_loop_button_submit_text = '//*[@id="__next"]/div[2]/div/main/div[1]/div/div/div/div['+ loop_text_num + ']/div/div[2]/div[1]/div/button[1]'
         
         self.logger.debug('Refresh chat page...')
-        self.driver.get(self.driver.current_url)
-        #self.driver.get(f'{chatgpt_chat_url}/{conversation_id}')
-        self.__check_blocking_elements()
+        
         chatgpt_loop_button_on_find = WebDriverWait(self.driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, chatgpt_loop_button_on_text_find))
+            EC.visibility_of_element_located((By.XPATH, chatgpt_loop_button_on_text_find))
         ) 
         try:
             chatgpt_loop_button_on_find.click()
         except:
             pass
         try:
-            chatgpt_loop_button_on = WebDriverWait(self.driver, 10).until(
-                EC.visibility_of_element_located((By.XPATH,chatgpt_loop_button_on_text))
-            )  
-            chatgpt_loop_button_on.click()
-            
-            self.driver.implicitly_wait(1)
-            
             chatgpt_loop_button_submit = WebDriverWait(self.driver, 10).until(
                 EC.element_to_be_clickable((By.XPATH,chatgpt_loop_button_submit_text))
             )  
@@ -578,27 +665,30 @@ class ChatGPT:
         else:
             return False
         
-    def init_personality(self,new_conversation:bool=True,personality_definition:list=[{"content":"you are a pig","AI_verify":True}]) -> dict:
+    async def init_personality(self,new_conversation:bool=True, conversation_id = "",personality_definition:list=[{"content":"you are a pig","AI_verify":True}]) -> dict:
         '''
         new_conversation : Whether to open a new session for personality initialization, the default is true
         
         personality_definition: Personality initialization phrase is a list, a single element is a dict, 
         content is the content of the phrase, and AI_verify is a successful detection of personality
         
-        returns a boolean result
+        returns a dict,boolean result and the conversation_id in it.
         '''
+        
+        
         if new_conversation:
-            self.refresh_chat_page()
-        asyncio.run(asyncio.sleep(1))
+            new_conversation_id = await self.refresh_chat_page()
+            conversation_id = new_conversation_id
+        
         for single_definition in personality_definition:
-            this_res = self.send_message(single_definition["content"])
-            asyncio.run(asyncio.sleep(1))
+            this_res = await self.send_message(conversation_id,single_definition["content"]) # type: ignore
+            await asyncio.sleep(1)
             if single_definition["AI_verify"]:
                 this_status = self.wide_awake(this_res["message"])
                 error_num = 0
                 while this_status:
-                    self.backtrack_chat(single_definition["content"])
-                    asyncio.run(asyncio.sleep(1))
+                    await self.backtrack_chat(conversation_id,single_definition["content"]) # type: ignore
+                    await asyncio.sleep(1)
                     responses = self.driver.find_elements(*chatgpt_big_response)
                     if responses:
                         response = responses[-1]
@@ -618,19 +708,143 @@ class ChatGPT:
                         break
                     
                     
-        res = self.send_message("so please introduce yourself now")
+        res = await self.send_message(conversation_id,"so please introduce yourself now")  # type: ignore
         status = self.wide_awake(res["message"])
                 
-        return {"status":status,"conversation_id":res["conversation_id"]}
+        return {"status":status,"conversation_id":conversation_id}
         
     def wide_awake(self,res:str) -> bool:
+        '''AI tag'''
         words = ["AI","Ai","ai","Assistant","language model","OpenAI","程序","计算机","人工智能","机器人"]
-        '''
-        Initialization result detection vocabulary, which can be changed according to its own language and initialization statement
-        '''
+        #Initialization result detection vocabulary, which can be changed according to its own language and initialization statement
+        
         status = False
         for word in words:
             if word in res:
                 status = True
         return status
+    
+    async def cf(self,conversation_id) -> None:
+        '''A new way to verify cf'''
+        if not conversation_id:
+            conversation_id = self.__conversation_id
+        self.logger.debug('Ensuring Cloudflare cookies...')
+        await self.__ensure_cf()
+
+        self.logger.debug('Opening chat page...')
+        self.driver.get(f'{chatgpt_chat_url}/{conversation_id}')
+        self.__check_blocking_elements()
         
+        
+        self.logger.debug('Ensuring Cloudflare cookies...')
+        await self.__ensure_cf()
+        self.driver.get(f'{chatgpt_chat_url}/{conversation_id}')
+        self.__check_blocking_elements()
+    
+    async def return_chat_url(self):
+        '''
+        open new tab,and return the new conversation_id'''
+        
+        self.logger.debug('Opening new tab...')
+        original_window = self.driver.current_window_handle
+        self.driver.switch_to.new_window('tab')
+        self.driver.get("https://chat.openai.com/api/auth/session")
+        await asyncio.sleep(2)
+        token = "Bearer "
+        Authorization = []
+        try:
+            response = self.driver.execute_script("return JSON.parse(document.body.innerText)")
+            token += response["accessToken"]
+            Authorization.append(token)
+        except:
+            pass
+        headers = {'Authorization': token} 
+        self.driver.execute_cdp_cmd("Network.enable", {})   
+        self.driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {'headers': headers})
+        self.driver.get("https://chat.openai.com/backend-api/conversations?offset=0&limit=1")
+        await asyncio.sleep(2)
+        
+        page_json = self.driver.execute_script("return JSON.parse(document.body.innerText)")
+        conversation_id = page_json["items"][0]["id"]
+        
+        self.logger.debug('Closing tab...')
+        self.driver.close()
+        self.driver.switch_to.window(original_window)
+ 
+        return conversation_id
+        
+    async def loop_gpt(self):
+        '''
+        Handle event loop messages
+        
+        
+        self.rec :  return message
+        '''
+        while True:
+            await asyncio.sleep(4)
+            if not self.send_queue.empty():
+                msg_send = await self.send_queue.get()
+                if msg_send["type"] == "msg":
+                    # msg 
+                    try:
+                        msg_rec = await self.send_message(msg_send["conversation_id"],msg_send["msg"])
+                    except:
+                        msg_send["msg_rec"] = {}
+                        msg_send["msg_rec"]["message"] = "猪咪不知道..."
+                        msg_rec = msg_send["msg_rec"]
+                        
+                    if msg_rec:
+                        msg_send["msg_rec"] = msg_rec
+                        
+                        # Do other processing on the reply
+                        # if msg_send["tts"]:
+                        #     self.tts_queue.put_nowait(msg_send)
+                        
+                elif msg_send["type"] == "loop":
+                    try:
+                        msg_send["msg_rec"] = self.backtrack_chat(msg_send["conversation_id"],msg_send["msg_send"])
+                    except:
+                        
+                        msg_send["msg_rec"] = False
+                elif msg_send["type"] == "init":
+                    try:
+                        msg_send["msg_rec"] = self.init_personality()
+                    except:
+                        
+                        msg_send["msg_rec"] = {"status":False,"conversation_id":"失败了"}
+                    
+                self.rec.append(msg_send)
+    
+    async def get_id(self) -> int:
+        ''' msg id '''
+        self.msg_id += 1
+        return self.msg_id
+                
+    async def async_send_message(self,conversation_id,msg):
+        '''async send_message,
+        conversation_id: conversation_id,
+        msg: your message to gpt.
+        returns a dictionary containing the conversation id and the reply
+        '''
+        msg_dict = {
+            "id":await self.get_id(), 
+            "type":"msg",
+            "msg":msg,
+            "conversation_id":conversation_id
+        }
+        await self.send_queue.put(msg_dict)
+        
+        rec_lock = False
+        message :dict 
+        while 1:
+            for x in self.rec:
+                if x["id"] == msg_dict["id"]:
+                    rec_lock = True
+                    message = x["msg_rec"]
+                    self.rec.remove(x)
+                    break
+            if rec_lock:
+                break
+            await asyncio.sleep(2)
+            
+        return message   # type: ignore
