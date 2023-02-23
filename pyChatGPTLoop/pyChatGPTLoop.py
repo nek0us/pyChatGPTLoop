@@ -130,21 +130,26 @@ class ChatGPT:
         self.rec = []
         self.msg_id:int = 0
         self.send_queue = asyncio.Queue()
-        self.loop = asyncio.get_event_loop()
-        self.t2 = asyncio.ensure_future(self.loop_gpt())
-        self.t = threading.Thread(target=self.loop.run_forever)
-        self.t.start()
-        
-        asyncio.run(self.__init_browser())
-        
+        self.loop_main = asyncio.new_event_loop()
+        self.t1 = threading.Thread(target=self.thread_loop,args=(self.loop_gpt,))
+        self.t2 = threading.Thread(target=self.thread_loop,args=(self.__init_browser,))
+        self.t1.start()
+        self.t2.start()
         
         
 
+    def thread_loop(self,method):
+        asyncio.set_event_loop(self.loop_main)
+        loop = asyncio.new_event_loop()
+        asyncio.run(method(loop))
+    
+        
+        
     def __del__(self):
         '''
         Close the browser and display
         '''
-        self.loop.stop()
+        self.loop_main.stop()
         
         self.__is_active = False
         if hasattr(self, 'driver'):
@@ -167,10 +172,12 @@ class ChatGPT:
             stream_handler.setFormatter(formatter)
             self.logger.addHandler(stream_handler)
 
-    async def __init_browser(self) -> None:
+    async def __init_browser(self,loop) -> None:
         '''
         Initialize the browser
         '''
+        
+        asyncio.set_event_loop(loop)
         if platform.system() == 'Linux' and 'DISPLAY' not in os.environ:
             self.logger.debug('Starting virtual display...')
             try:
@@ -192,6 +199,9 @@ class ChatGPT:
         self.logger.debug('Initializing browser...')
         options = uc.ChromeOptions()
         options.add_argument('--window-size=1024,768')
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        
+        
         if self.__proxy:
             options.add_argument(f'--proxy-server={self.__proxy}')
         for arg in self.__chrome_args:
@@ -245,43 +255,81 @@ class ChatGPT:
         self.__is_active = True
         Thread(target=self.__keep_alive, daemon=True).start()
 
-    async def __ensure_cf(self, retry: int = 3) -> None:
+    async def __ensure_cf(self, retry: int = 5) -> None:
         '''
         Ensure Cloudflare cookies are set\n
         :param retry: Number of retries
         '''
+        
+        self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            "source": """
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            })
+            """
+        })
         self.logger.debug('Opening new tab...')
         original_window = self.driver.current_window_handle
         self.driver.switch_to.new_window('tab')
 
         self.logger.debug('Getting Cloudflare challenge...')
-        self.driver.get('https://chat.openai.com/api/auth/session')
-        try:
+        while True:
+            self.driver.get('https://chat.openai.com/api/auth/session')
             
-            page  = self.driver.execute_script("return JSON.parse(document.body.innerText)")
-            response = json.dumps(self.driver.execute_script("return JSON.parse(document.body.innerText)"))
-            
-        except:
-            # cf 
             try:
-                # cf button
-                cf_button = False
+                # ok?
+                await asyncio.sleep(1)
+                self.driver.execute_script("return JSON.parse(document.body.innerText)")
+                
+            except:
+                # no,it's cf 
                 try:
-                    cf_button_find = WebDriverWait(self.driver, 10).until(
-                    EC.visibility_of_element_located((By.XPATH, '//*[@id="challenge-stage"]/div/input'))
-                ) 
-                    cf_button = True
-                except:
-                    pass
-                
-                if cf_button:
-                
-                    cf_button_find = WebDriverWait(self.driver, 10).until(
-                    EC.visibility_of_element_located((By.XPATH, '//*[@id="challenge-stage"]/div'))
-                ) 
-                    cf_button_find.click()
+                    # check cf button
+                    cf_button = False
+                    try:
+                        
+                        cf_button_find = WebDriverWait(self.driver, 5).until(
+                            
+                        EC.visibility_of_element_located((By.XPATH, '//*[@id="challenge-stage"]/div/input'))
+                    ) 
+                        cf_button = True
+                    except:
+                        pass
                     
-                else:
+                    if cf_button:
+                    
+                        cf_button_find = WebDriverWait(self.driver, 1).until(
+                        EC.visibility_of_element_located((By.XPATH, '//*[@id="cf-stage"]/div[6]/label/span'))
+                    ) 
+                        cf_button_find.click()
+                        
+                    else:
+                        try:
+                                iframe = WebDriverWait(self.driver, 5).until(
+                                    EC.presence_of_element_located((By.XPATH, '/html/body/div/div[2]/form/div[4]/div/div/iframe'))
+                                )
+                                self.driver.switch_to.frame(iframe)
+                                
+                                
+                                cf_button_find = WebDriverWait(self.driver, 5).until(
+                                EC.presence_of_element_located((By.XPATH, '/html/body/table/tbody/tr/td/div/div[1]/table/tbody/tr/td[1]/div[6]/label'))
+                            ) 
+                                cf_button_find.click()
+
+
+                        except:
+                            self.logger.debug(f'Cloudflare challenge failed, retrying {retry}...')
+                            self.driver.save_screenshot(f'cf_failed_{retry}.png')
+                            if retry > 0:
+                                self.logger.debug('Closing tab...')
+                                self.driver.close()
+                                self.driver.switch_to.window(original_window)
+                                return await self.__ensure_cf(retry - 1)
+                            raise ValueError('Cloudflare challenge failed')
+                    
+                    
+                except SeleniumExceptions.TimeoutException:
+                    
                     self.logger.debug(f'Cloudflare challenge failed, retrying {retry}...')
                     self.driver.save_screenshot(f'cf_failed_{retry}.png')
                     if retry > 0:
@@ -290,30 +338,22 @@ class ChatGPT:
                         self.driver.switch_to.window(original_window)
                         return await self.__ensure_cf(retry - 1)
                     raise ValueError('Cloudflare challenge failed')
-                
-                
-            except SeleniumExceptions.TimeoutException:
-                
-                self.logger.debug(f'Cloudflare challenge failed, retrying {retry}...')
-                self.driver.save_screenshot(f'cf_failed_{retry}.png')
-                if retry > 0:
-                    self.logger.debug('Closing tab...')
-                    self.driver.close()
-                    self.driver.switch_to.window(original_window)
-                    return await self.__ensure_cf(retry - 1)
-                raise ValueError('Cloudflare challenge failed')
-        self.logger.debug('Cloudflare challenge passed')
-        
-        self.driver.get('https://chat.openai.com/api/auth/session')
-        wait = WebDriverWait(self.driver, 5).until(EC.invisibility_of_element_located((By.CSS_SELECTOR, 'a')))
-        await asyncio.sleep(3)
-        self.logger.debug('Validating authorization...')
-        try:
-            response = json.dumps(self.driver.execute_script("return JSON.parse(document.body.innerText)"))
-        
-        except:
+            
             await asyncio.sleep(3)
-            response = json.dumps(self.driver.execute_script("return JSON.parse(document.body.innerText)"))
+            self.logger.debug('Cloudflare challenge passed')
+            
+            self.driver.get('https://chat.openai.com/api/auth/session')
+            
+            
+            self.logger.debug('Validating authorization...')
+            try:
+                await asyncio.sleep(1)
+                response = json.dumps(self.driver.execute_script("return JSON.parse(document.body.innerText)"))
+                break
+            except:
+                pass
+            
+        response = json.dumps(self.driver.execute_script("return JSON.parse(document.body.innerText)"))
         
         if response[0] != '{':
             response = self.driver.find_element(By.TAG_NAME, 'pre').text
@@ -465,7 +505,11 @@ class ChatGPT:
         ''' 
         await self.cf(conversation_id)
 
-        await asyncio.sleep(2)
+        #await asyncio.sleep(2)
+        self.logger.debug('Wait...')
+        wait = WebDriverWait(self.driver, 10)
+        elements = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//div[@class='min-h-[20px] flex flex-col items-start gap-4 whitespace-pre-wrap']")))
+
         
         self.logger.debug('Sending message...')
         textbox = WebDriverWait(self.driver, 5).until(
@@ -488,12 +532,12 @@ class ChatGPT:
                 print(i, end='')
                 time.sleep(0.1)
             return print() # type: ignore 
-
+        
         self.logger.debug('Waiting for completion...')
         WebDriverWait(self.driver, 120).until_not(
             EC.presence_of_element_located(chatgpt_streaming)
         )
-
+        
         self.logger.debug('Getting response...')
         responses = self.driver.find_elements(*chatgpt_big_response)
         if responses:
@@ -738,10 +782,10 @@ class ChatGPT:
         self.__check_blocking_elements()
         
         
-        self.logger.debug('Ensuring Cloudflare cookies...')
-        await self.__ensure_cf()
-        self.driver.get(f'{chatgpt_chat_url}/{conversation_id}')
-        self.__check_blocking_elements()
+        # self.logger.debug('Ensuring Cloudflare cookies...')
+        # await self.__ensure_cf()
+        # self.driver.get(f'{chatgpt_chat_url}/{conversation_id}')
+        # self.__check_blocking_elements()
     
     async def return_chat_url(self):
         '''
@@ -775,13 +819,14 @@ class ChatGPT:
  
         return conversation_id
         
-    async def loop_gpt(self):
+    async def loop_gpt(self,loop):
         '''
         Handle event loop messages
         
         
         self.rec :  return message
         '''
+        asyncio.set_event_loop(loop)
         while True:
             await asyncio.sleep(4)
             if not self.send_queue.empty():
