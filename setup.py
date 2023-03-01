@@ -7,7 +7,7 @@ requirements = ["undetected-chromedriver>=3.2.1","PyVirtualDisplay>=3.0","markdo
 
 setup(
     name="pyChatGPTLoop",
-    version="0.1.4",
+    version="0.1.5",
     author="nek0us",
     author_email="nekouss@gmail.com",
     description="Added backtracking chat on the basis of [terry3041/pyChatGPT]",

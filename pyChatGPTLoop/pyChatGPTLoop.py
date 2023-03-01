@@ -915,9 +915,9 @@ return 2 means that an error occurred but the processing was successful,
 and returning to the previous dialogue'''
         while_num = 5
         while while_num:
-            while_num -= 1
             responses = self.driver.find_elements(By.XPATH, '//*[@id="__next"]/div[2]/div/main/div[2]/form/div/div/span') 
             if responses:
+                while_num -= 1
                 self.logger.debug('Waiting for regenerat error...')
                 response = responses[-1]
                 chatgpt_loop_text = self.driver.find_elements(By.XPATH,"//div[@class='min-h-[20px] flex flex-col items-start gap-4 whitespace-pre-wrap']")
