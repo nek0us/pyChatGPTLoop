@@ -16,6 +16,7 @@ Added backtracking chat on the basis of [terry3041/pyChatGPT](https://github.com
 -   [x] increase the function of initializing personality
 -   [x] set local chromedriver 
 -   [x] optimized the output, removing two newlines
+-   [x] added reply failure handling
 
 ## backtracking chat
 
@@ -74,6 +75,7 @@ api = ChatGPT(session_token, verbose=True)  # verbose mode (print debug messages
 
 api = ChatGPT(session_token, driver_path="C:\\yourdriverpath\\chromedriver.exe") # set local chromedriver if you don't wish it update in windows
 api = ChatGPT(session_token, driver_path="/yourpath/chromedriver") # set local chromedriver if you don't wish it update in linux
+api = ChatGPT(session_token,personality_definition=your List) # the words list of init personality
 
 # auth with google login
 api = ChatGPT(auth_type='google', email='example@gmail.com', password='password')

@@ -62,7 +62,8 @@ class ChatGPT:
         chrome_args: list = [],
         moderation: bool = True,
         verbose: bool = False,
-        driver_path = '',
+        driver_path: str = '',
+        personality_definition: list = [],
     ):
         '''
         Initialize the ChatGPT object\n
@@ -93,6 +94,7 @@ class ChatGPT:
         self.__chrome_args = chrome_args
         self.__moderation = moderation
         self.__driver_path = driver_path
+        self.__personality_definition = personality_definition
 
         if not self.__session_token and (
             not self.__email or not self.__password or not self.__auth_type
@@ -278,7 +280,7 @@ class ChatGPT:
             
             try:
                 # ok?
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
                 self.driver.execute_script("return JSON.parse(document.body.innerText)")
                 
             except:
@@ -288,7 +290,7 @@ class ChatGPT:
                     cf_button = False
                     try:
                         
-                        cf_button_find = WebDriverWait(self.driver, 5).until(
+                        cf_button_find = WebDriverWait(self.driver, 10).until(
                             
                         EC.visibility_of_element_located((By.XPATH, '//*[@id="challenge-stage"]/div/input'))
                     ) 
@@ -298,7 +300,7 @@ class ChatGPT:
                     
                     if cf_button:
                     
-                        cf_button_find = WebDriverWait(self.driver, 1).until(
+                        cf_button_find = WebDriverWait(self.driver, 5).until(
                         EC.visibility_of_element_located((By.XPATH, '//*[@id="cf-stage"]/div[6]/label/span'))
                     ) 
                         cf_button_find.click()
@@ -342,7 +344,7 @@ class ChatGPT:
             await asyncio.sleep(3)
             self.logger.debug('Cloudflare challenge passed')
             
-            self.driver.get('https://chat.openai.com/api/auth/session')
+            #self.driver.get('https://chat.openai.com/api/auth/session')
             
             
             self.logger.debug('Validating authorization...')
@@ -504,7 +506,11 @@ class ChatGPT:
         :return: Dictionary with keys `message` and `conversation_id`
         ''' 
         await self.cf(conversation_id)
-
+        res_code = await self.regenerate_error()
+        if res_code == 0:
+            return {'message': "regenerate error! retries exceeded.", 'conversation_id': conversation_id}
+        elif res_code == 2:
+            return {'message': "Sorry,please ask again.", 'conversation_id': conversation_id}
         #await asyncio.sleep(2)
         self.logger.debug('Wait...')
         wait = WebDriverWait(self.driver, 10)
@@ -711,7 +717,7 @@ class ChatGPT:
         else:
             return False
         
-    async def init_personality(self,new_conversation:bool=True, conversation_id = "",personality_definition:list=[{"content":"you are a pig","AI_verify":True}]) -> dict:
+    async def init_personality(self,new_conversation:bool=True, conversation_id = "",personality_definition:list=[]) -> dict:
         '''
         new_conversation : Whether to open a new session for personality initialization, the default is true
         
@@ -725,7 +731,9 @@ class ChatGPT:
         if new_conversation:
             new_conversation_id = await self.refresh_chat_page()
             conversation_id = new_conversation_id
-        
+        if personality_definition:
+            personality_definition = self.__personality_definition
+            
         for single_definition in personality_definition:
             this_res = await self.send_message(conversation_id,single_definition["content"]) # type: ignore
             await asyncio.sleep(1)
@@ -828,7 +836,7 @@ class ChatGPT:
         '''
         asyncio.set_event_loop(loop)
         while True:
-            await asyncio.sleep(4)
+            await asyncio.sleep(2)
             if not self.send_queue.empty():
                 msg_send = await self.send_queue.get()
                 if msg_send["type"] == "msg":
@@ -898,3 +906,54 @@ class ChatGPT:
             await asyncio.sleep(2)
             
         return message   # type: ignore
+    
+    async def regenerate_error(self):
+        '''gpt reply error handling,
+return 0 means processing failed,
+return 1 means no error occurred,
+return 2 means that an error occurred but the processing was successful, 
+and returning to the previous dialogue'''
+        while_num = 5
+        while while_num:
+            while_num -= 1
+            responses = self.driver.find_elements(By.XPATH, '//*[@id="__next"]/div[2]/div/main/div[2]/form/div/div/span') 
+            if responses:
+                self.logger.debug('Waiting for regenerat error...')
+                response = responses[-1]
+                chatgpt_loop_text = self.driver.find_elements(By.XPATH,"//div[@class='min-h-[20px] flex flex-col items-start gap-4 whitespace-pre-wrap']")
+                loop_text_num = str(len(chatgpt_loop_text) + 1)
+                chatgpt_loop_button_on_text_find = '//*[@id="__next"]/div[2]/div/main/div[1]/div/div/div/div['+ loop_text_num + ']/div/div[2]/div[2]'
+                chatgpt_text_ok = '//*[@id="__next"]/div[2]/div/main/div[1]/div/div/div/div['+ loop_text_num + ']/div/div[2]/div[1]/textarea'
+                chatgpt_loop_button_submit_text = '//*[@id="__next"]/div[2]/div/main/div[1]/div/div/div/div['+ loop_text_num + ']/div/div[2]/div[1]/div/button[1]'
+                chatgpt_loop_button_on_find = WebDriverWait(self.driver, 10).until(
+                    EC.visibility_of_element_located((By.XPATH, chatgpt_loop_button_on_text_find))
+                ) 
+                try:
+                    chatgpt_loop_button_on_find.click()
+                except:
+                    pass
+                try:
+                    chatgpt_text_ok_textbox = WebDriverWait(self.driver, 10).until(
+                        EC.element_to_be_clickable((By.XPATH,chatgpt_text_ok))
+                    ) 
+                    chatgpt_text_ok_textbox.clear()
+                    chatgpt_text_ok_textbox.send_keys("ok")
+                    
+                    chatgpt_loop_button_submit = WebDriverWait(self.driver, 10).until(
+                        EC.element_to_be_clickable((By.XPATH,chatgpt_loop_button_submit_text))
+                    )  
+                    
+                    chatgpt_loop_button_submit.click()
+                except:
+                    pass
+                self.logger.debug('Waiting for completion...')
+                WebDriverWait(self.driver, 10).until_not(
+                    EC.presence_of_element_located(chatgpt_streaming)
+                )
+                await asyncio.sleep(2)
+            else:
+                if while_num == 5:
+                    return 1
+                else:
+                    return 2
+        return 0
