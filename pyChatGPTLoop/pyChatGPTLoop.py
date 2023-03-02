@@ -15,6 +15,7 @@ import re
 import os
 import asyncio 
 import threading
+import signal
 
 
 cf_challenge_form = (By.ID, 'challenge-form')
@@ -133,26 +134,24 @@ class ChatGPT:
         self.msg_id:int = 0
         self.send_queue = asyncio.Queue()
         self.loop_main = asyncio.new_event_loop()
-        self.t1 = threading.Thread(target=self.thread_loop,args=(self.loop_gpt,))
-        self.t2 = threading.Thread(target=self.thread_loop,args=(self.__init_browser,))
+        self.t1 = threading.Thread(target=self.task_start)
         self.t1.start()
-        self.t2.start()
         
-        
-
-    def thread_loop(self,method):
+    def task_start(self):
         asyncio.set_event_loop(self.loop_main)
-        loop = asyncio.new_event_loop()
-        asyncio.run(method(loop))
-    
-        
-        
+        try:
+            self.loop_main.run_until_complete(asyncio.gather(
+                self.loop_gpt(),
+                self.__init_browser()
+            ))
+        finally:
+            self.loop_main.call_soon_threadsafe(self.loop_main.stop)        
+            self.loop_main.close()
+            
     def __del__(self):
         '''
         Close the browser and display
         '''
-        self.loop_main.stop()
-        
         self.__is_active = False
         if hasattr(self, 'driver'):
             self.logger.debug('Closing browser...')
@@ -160,6 +159,8 @@ class ChatGPT:
         if hasattr(self, 'display'):
             self.logger.debug('Closing display...')
             self.display.stop()
+       
+        
 
     def __init_logger(self, verbose: bool) -> None:
         '''
@@ -174,12 +175,10 @@ class ChatGPT:
             stream_handler.setFormatter(formatter)
             self.logger.addHandler(stream_handler)
 
-    async def __init_browser(self,loop) -> None:
+    async def __init_browser(self) -> None:
         '''
         Initialize the browser
         '''
-        
-        asyncio.set_event_loop(loop)
         if platform.system() == 'Linux' and 'DISPLAY' not in os.environ:
             self.logger.debug('Starting virtual display...')
             try:
@@ -827,14 +826,13 @@ class ChatGPT:
  
         return conversation_id
         
-    async def loop_gpt(self,loop):
+    async def loop_gpt(self):
         '''
         Handle event loop messages
         
         
         self.rec :  return message
         '''
-        asyncio.set_event_loop(loop)
         while True:
             await asyncio.sleep(2)
             if not self.send_queue.empty():
