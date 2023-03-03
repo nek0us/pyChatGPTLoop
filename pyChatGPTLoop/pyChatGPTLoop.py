@@ -339,6 +339,8 @@ class ChatGPT:
                         self.driver.switch_to.window(original_window)
                         return await self.__ensure_cf(retry - 1)
                     raise ValueError('Cloudflare challenge failed')
+                except ValueError:
+                    break
             
             await asyncio.sleep(3)
             self.logger.debug('Cloudflare challenge passed')
@@ -512,15 +514,16 @@ class ChatGPT:
             return {'message': "Sorry,please ask again.", 'conversation_id': conversation_id}
         #await asyncio.sleep(2)
         self.logger.debug('Wait...')
-        wait = WebDriverWait(self.driver, 10)
+        wait = WebDriverWait(self.driver, 20)
         elements = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//div[@class='min-h-[20px] flex flex-col items-start gap-4 whitespace-pre-wrap']")))
 
-        
+        await asyncio.sleep(1)
         self.logger.debug('Sending message...')
-        textbox = WebDriverWait(self.driver, 5).until(
+        textbox = WebDriverWait(self.driver, 20).until(
             EC.element_to_be_clickable(chatgpt_textbox)
         )
         textbox.click()
+        await asyncio.sleep(0.5)
         self.driver.execute_script(
             '''
         var element = arguments[0], txt = arguments[1];
@@ -530,42 +533,54 @@ class ChatGPT:
             textbox,
             message,
         )
+        await asyncio.sleep(0.5)
         textbox.send_keys(Keys.ENTER)
-
+        await asyncio.sleep(0.5)
         if stream:
             for i in self.__stream_message():
                 print(i, end='')
                 time.sleep(0.1)
             return print() # type: ignore 
-        
-        self.logger.debug('Waiting for completion...')
-        WebDriverWait(self.driver, 120).until_not(
-            EC.presence_of_element_located(chatgpt_streaming)
-        )
-        
-        self.logger.debug('Getting response...')
-        responses = self.driver.find_elements(*chatgpt_big_response)
-        if responses:
-            response = responses[-1]
-            if 'text-red' in response.get_attribute('class'):
-                self.logger.debug('Response is an error')
-                raise ValueError(response.text)
-        response = self.driver.find_elements(*chatgpt_small_response)[-1]
+        num = 5
+        content = ""
+        while num:
+            try:
+                res_code = await self.regenerate_error()
+                if res_code == 0:
+                    return {'message': "regenerate error! retries exceeded.", 'conversation_id': conversation_id}
+                elif res_code == 2:
+                    return {'message': "Sorry,please ask again.", 'conversation_id': conversation_id}
+                self.logger.debug('Waiting for completion...')
+                WebDriverWait(self.driver, 120).until_not(
+                    EC.presence_of_element_located(chatgpt_streaming)
+                )
+                
+                self.logger.debug('Getting response...')
+                responses = self.driver.find_elements(*chatgpt_big_response)
+                if responses:
+                    response = responses[-1]
+                    if 'text-red' in response.get_attribute('class'):
+                        self.logger.debug('Response is an error')
+                        raise ValueError(response.text)
+                response = self.driver.find_elements(*chatgpt_small_response)[-1]
 
-        content = markdownify(response.get_attribute('innerHTML')).replace(
-            'Copy code`', '`'
-        )
-        pattern = re.compile(
-            r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-        )
-        matches = pattern.search(self.driver.current_url)
-        if not matches:
-            self.reset_conversation()
-            WebDriverWait(self.driver, 5).until(
-                EC.element_to_be_clickable(chatgpt_chats_list_first_node)
-            ).click()
-            matches = pattern.search(self.driver.current_url)
-        conversation_id = matches.group() # type: ignore 
+                content = markdownify(response.get_attribute('innerHTML')).replace(
+                    'Copy code`', '`'
+                )
+                pattern = re.compile(
+                    r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+                )
+                matches = pattern.search(self.driver.current_url)
+                if not matches:
+                    self.reset_conversation()
+                    WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable(chatgpt_chats_list_first_node)
+                    ).click()
+                    matches = pattern.search(self.driver.current_url)
+                conversation_id = matches.group() # type: ignore 
+                break
+            except:
+                num -= 1
         if content[-2:] == "\n\n":
             content = content[:-2]
         return {'message': content, 'conversation_id': conversation_id}
@@ -619,20 +634,21 @@ class ChatGPT:
         
         await self.cf(None)
         
-        
+        await asyncio.sleep(1)
         if not self.driver.current_url.startswith(chatgpt_chat_url):
             return self.logger.debug('Current URL is not chat page, skipping refresh')
 
         self.driver.get(chatgpt_chat_url)
-        self.__check_capacity(chatgpt_chat_url)
+        #self.__check_capacity(chatgpt_chat_url)
         self.__check_blocking_elements()
         
-        
+        await asyncio.sleep(0.5)
         self.logger.debug('Sending test message...')
-        textbox = WebDriverWait(self.driver, 5).until(
+        textbox = WebDriverWait(self.driver, 20).until(
             EC.element_to_be_clickable(chatgpt_textbox)
         )
         textbox.click()
+        await asyncio.sleep(0.5)
         self.driver.execute_script(
             '''
         var element = arguments[0], txt = arguments[1];
@@ -642,14 +658,31 @@ class ChatGPT:
             textbox,
             "1",
         )
+        await asyncio.sleep(0.5)
         textbox.send_keys(Keys.ENTER)
+        await asyncio.sleep(0.5)
 
+        num = 5
+        while num:
+            try:
+                self.logger.debug('Waiting for completion...')
+                WebDriverWait(self.driver, 120).until_not(
+                    EC.presence_of_element_located(chatgpt_streaming)
+                )
+                
+                self.logger.debug('Getting response...')
+                responses = self.driver.find_elements(*chatgpt_big_response)
+                if responses:
+                    response = responses[-1]
+                    if 'text-red' in response.get_attribute('class'):
+                        self.logger.debug('Response is an error')
+                        raise ValueError(response.text)
+                response = self.driver.find_elements(*chatgpt_small_response)[-1]
 
-        self.logger.debug('Waiting for completion...')
-        WebDriverWait(self.driver, 120).until_not(
-            EC.presence_of_element_located(chatgpt_streaming)
-        )
-
+                break
+            except:
+                num -= 1
+        await asyncio.sleep(0.5)
         return await self.return_chat_url()
         
     async def backtrack_chat(self,loop_text:str,conversation_id: str = "") -> bool:
@@ -730,41 +763,47 @@ class ChatGPT:
         if new_conversation:
             new_conversation_id = await self.refresh_chat_page()
             conversation_id = new_conversation_id
-        if personality_definition:
-            personality_definition = self.__personality_definition
-            
-        for single_definition in personality_definition:
-            this_res = await self.send_message(conversation_id,single_definition["content"]) # type: ignore
-            await asyncio.sleep(1)
-            if single_definition["AI_verify"]:
-                this_status = self.wide_awake(this_res["message"])
-                error_num = 0
-                while this_status:
-                    await self.backtrack_chat(conversation_id,single_definition["content"]) # type: ignore
-                    await asyncio.sleep(1)
-                    responses = self.driver.find_elements(*chatgpt_big_response)
-                    if responses:
-                        response = responses[-1]
-                        if 'text-red' in response.get_attribute('class'):
-                            self.logger.debug('Response is an error')
-                            raise ValueError(response.text)
-                    response = self.driver.find_elements(*chatgpt_small_response)[-1]
-                    content = markdownify(response.get_attribute('innerHTML')).replace('Copy code`', '`')
-                    if content[-2:] == "\n\n":
-                        content = content[:-2]
-                    this_status = self.wide_awake(content)
-                    error_num += 1
-                    if error_num > 3:
-                        '''
-                        If it fails more than three times, there may be a problem with your initialization vocabulary
-                        '''
-                        break
-                    
-                    
-        res = await self.send_message(conversation_id,"so please introduce yourself now")  # type: ignore
-        status = self.wide_awake(res["message"])
+        try:
+            if not personality_definition:
+                personality_definition = self.__personality_definition
                 
-        return {"status":status,"conversation_id":conversation_id}
+            for single_definition in personality_definition:
+                this_res = await self.send_message(conversation_id,single_definition["content"]) # type: ignore
+                await asyncio.sleep(1)
+                if single_definition["AI_verify"]:
+                    this_status = self.wide_awake(this_res["message"])
+                    error_num = 0
+                    while this_status:
+                        await self.backtrack_chat(conversation_id,single_definition["content"]) # type: ignore
+                        await asyncio.sleep(1)
+                        responses = self.driver.find_elements(*chatgpt_big_response)
+                        if responses:
+                            response = responses[-1]
+                            if 'text-red' in response.get_attribute('class'):
+                                self.logger.debug('Response is an error')
+                                raise ValueError(response.text)
+                        response = self.driver.find_elements(*chatgpt_small_response)[-1]
+                        content = markdownify(response.get_attribute('innerHTML')).replace('Copy code`', '`')
+                        if content[-2:] == "\n\n":
+                            content = content[:-2]
+                        this_status = self.wide_awake(content)
+                        error_num += 1
+                        if error_num > 3:
+                            '''
+                            If it fails more than three times, there may be a problem with your initialization vocabulary
+                            '''
+                            break
+                        
+                        
+            res = await self.send_message(conversation_id,"so please introduce yourself now")  # type: ignore
+            status = self.wide_awake(res["message"])
+            if status :
+                status = False
+            else:
+                status = True        
+            return {"status":status,"conversation_id":conversation_id}
+        except:
+            return {"status":False,"conversation_id":conversation_id}
         
     def wide_awake(self,res:str) -> bool:
         '''AI tag'''
@@ -801,28 +840,35 @@ class ChatGPT:
         self.logger.debug('Opening new tab...')
         original_window = self.driver.current_window_handle
         self.driver.switch_to.new_window('tab')
-        self.driver.get("https://chat.openai.com/api/auth/session")
-        await asyncio.sleep(2)
-        token = "Bearer "
-        Authorization = []
-        try:
-            response = self.driver.execute_script("return JSON.parse(document.body.innerText)")
-            token += response["accessToken"]
-            Authorization.append(token)
-        except:
-            pass
-        headers = {'Authorization': token} 
-        self.driver.execute_cdp_cmd("Network.enable", {})   
-        self.driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {'headers': headers})
-        self.driver.get("https://chat.openai.com/backend-api/conversations?offset=0&limit=1")
-        await asyncio.sleep(2)
-        
-        page_json = self.driver.execute_script("return JSON.parse(document.body.innerText)")
-        conversation_id = page_json["items"][0]["id"]
-        
-        self.logger.debug('Closing tab...')
-        self.driver.close()
-        self.driver.switch_to.window(original_window)
+        num = 5
+        conversation_id = ""
+        while num:
+            try:
+                self.driver.get("https://chat.openai.com/api/auth/session")
+                await asyncio.sleep(2)
+                token = "Bearer "
+                Authorization = []
+                try:
+                    response = self.driver.execute_script("return JSON.parse(document.body.innerText)")
+                    token += response["accessToken"]
+                    Authorization.append(token)
+                except:
+                    pass
+                headers = {'Authorization': token} 
+                self.driver.execute_cdp_cmd("Network.enable", {})   
+                self.driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {'headers': headers})
+                self.driver.get("https://chat.openai.com/backend-api/conversations?offset=0&limit=1")
+                await asyncio.sleep(2)
+                
+                page_json = self.driver.execute_script("return JSON.parse(document.body.innerText)")
+                conversation_id = page_json["items"][0]["id"]
+                
+                self.logger.debug('Closing tab...')
+                self.driver.close()
+                self.driver.switch_to.window(original_window)
+                break
+            except:
+                num -= 1
  
         return conversation_id
         
@@ -834,7 +880,7 @@ class ChatGPT:
         self.rec :  return message
         '''
         while True:
-            await asyncio.sleep(2)
+            await asyncio.sleep(0.5)
             if not self.send_queue.empty():
                 msg_send = await self.send_queue.get()
                 if msg_send["type"] == "msg":
@@ -855,13 +901,13 @@ class ChatGPT:
                         
                 elif msg_send["type"] == "loop":
                     try:
-                        msg_send["msg_rec"] = await self.backtrack_chat(msg_send["msg_send"],msg_send["conversation_id"])
+                        msg_send["msg_rec"] = await self.backtrack_chat(msg_send["msg"],msg_send["conversation_id"])
                     except:
                         
                         msg_send["msg_rec"] = False
                 elif msg_send["type"] == "init":
                     try:
-                        msg_send["msg_rec"] = await self.init_personality(bool(msg_send["msg_send"]),msg_send["conversation_id"])
+                        msg_send["msg_rec"] = await self.init_personality(bool(msg_send["msg"]),msg_send["conversation_id"])
                     except:
                         
                         msg_send["msg_rec"] = {"status":False,"conversation_id":""}
