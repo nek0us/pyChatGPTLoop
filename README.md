@@ -17,6 +17,7 @@ Added backtracking chat on the basis of [terry3041/pyChatGPT](https://github.com
 -   [x] set local chromedriver 
 -   [x] optimized the output, removing two newlines
 -   [x] added reply failure handling
+-   [x] added GPT-ToolBox[GPT-ToolBox](https://github.com/bigemon/ChatGPT-ToolBox)
 
 ## backtracking chat
 
@@ -75,7 +76,8 @@ api = ChatGPT(session_token, verbose=True)  # verbose mode (print debug messages
 
 api = ChatGPT(session_token, driver_path="C:\\yourdriverpath\\chromedriver.exe") # set local chromedriver if you don't wish it update in windows
 api = ChatGPT(session_token, driver_path="/yourpath/chromedriver") # set local chromedriver if you don't wish it update in linux
-api = ChatGPT(session_token,personality_definition=your List) # the words list of init personality
+api = ChatGPT(session_token, personality_definition=your List) # the words list of init personality
+api = ChatGPT(session_token, toolbox=True) # use GPT-ToolBox
 
 # auth with google login
 api = ChatGPT(auth_type='google', email='example@gmail.com', password='password')
@@ -99,6 +101,7 @@ api = ChatGPT(
 api = ChatGPT(auth_type='openai', email='example@xxx.com', password='password',
     login_cookies_path='your_cookies_path',
 )
+
 
 api.reset_conversation()  # reset the conversation
 api.clear_conversations()  # clear all conversations
@@ -128,6 +131,12 @@ await api.init_personality(True,"",personality_definition)
 
 resp = await api.async_send_message(personality_definition,conversation_id,msg_type="init")
 
+#update session_toekn when chrome running
+resp = await api.async_send_message(new_cookie,conversation_id,msg_type="update_cookie")
+
+#all of resp:
+
+resp: dict == {"status":bool,any}
 ```
 
 ## Frequently Asked Questions

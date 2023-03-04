@@ -33,7 +33,7 @@ if __name__ == '__main__':
         driver_path = input('Please enter your chromedriver path if you have: eg: D:\\chromedriver.exe')
         #driver_path = "chromedriver.exe"
         
-        chat = ChatGPT(session_token, conversation_id,proxy=proxy,driver_path=driver_path,personality_definition = words)
+        chat = ChatGPT(session_token, conversation_id,proxy=proxy,driver_path=driver_path,personality_definition = words,toolbox=True)
         break
 
     clear_screen()
