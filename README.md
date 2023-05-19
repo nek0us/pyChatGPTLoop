@@ -9,6 +9,11 @@
 Added backtracking chat on the basis of [terry3041/pyChatGPT](https://github.com/terry3041/pyChatGPT)
 
 
+# stop updating
+停止更新，移至
+
+new plan[ChatGPT](https://github.com/nek0us/ChatGPT)
+
 ## Extra Features
 
 -   [x] Implement asynchronous use
